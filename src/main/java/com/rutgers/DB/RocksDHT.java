@@ -39,13 +39,13 @@ import org.rocksdb.WriteOptions;
  * @author eduard
  */
 public class RocksDHT implements Storage{
-    
+
     private Options options = null;
     private RocksDB dataMap = null;
     private WriteBatch writeBatch = null;
     private WriteOptions writeOpts = null;
     private Data d = null;
-    
+
     // Maintenance
     final private Map<Number640, Long> timeoutMap = new ConcurrentHashMap<Number640, Long>();
     final private ConcurrentSkipListMap<Long, Set<Number640>> timeoutMapRev = new ConcurrentSkipListMap<Long, Set<Number640>>();
@@ -79,7 +79,11 @@ public class RocksDHT implements Storage{
     public Data put(Number640 key, Data value) {
         byte[] k = new byte[key.byteValue()];
         byte[] v = value.toBytes();
-        writeBatch.put(k, v);
+        try {
+            writeBatch.put(k, v);
+        } catch (RocksDBException ex) {
+            Logger.getLogger(RocksDHT.class.getName()).log(Level.SEVERE, null, ex);
+        }
         return d;
     }
 
@@ -119,19 +123,19 @@ public class RocksDHT implements Storage{
 
     @Override
     public int contains(Number640 nmbr, Number640 nmbr1) {
-        Map<byte[], byte[]> multiGet = null;
-        
+        List<byte[]> multiGet = null;
+
         try {
             List<byte[]> list = new ArrayList<byte[]>();
-       
+
             int i = nmbr.contentKey().intValue();
             while(i < nmbr1.contentKey().intValue()) {
                 i++;
                 Number640 tmp = new Number640(nmbr.locationKey(),nmbr.domainKey(),new Number160(i), nmbr.versionKey());
                 list.add(new byte[tmp.byteValue()]);
             }
-            
-            multiGet = dataMap.multiGet(list);
+
+            multiGet = dataMap.multiGetAsList(list);
         } catch (RocksDBException ex) {
             Logger.getLogger(RocksDHT.class.getName()).log(Level.SEVERE, null, ex);
         }
@@ -193,7 +197,7 @@ public class RocksDHT implements Storage{
         }
         removeRevTimeout(key, oldExpiration);
     }
-    
+
     private Set<Number640> putIfAbsent2(long expiration, Set<Number640> hashSet) {
         Set<Number640> timeouts = timeoutMapRev.putIfAbsent(expiration, hashSet);
         return timeouts == null ? hashSet : timeouts;
@@ -207,7 +211,7 @@ public class RocksDHT implements Storage{
         }
         removeRevTimeout(key, expiration);
     }
-    
+
     private void removeRevTimeout(Number640 key, Long expiration) {
         Set<Number640> tmp = timeoutMapRev.get(expiration);
         if (tmp != null) {
@@ -290,7 +294,7 @@ public class RocksDHT implements Storage{
         }
         Set<Number160> contentIDs = responsibilityMapRev.get(peerId);
         if(contentIDs == null) {
-                contentIDs = Collections.newSetFromMap(new ConcurrentHashMap<Number160, Boolean>()); 
+                contentIDs = Collections.newSetFromMap(new ConcurrentHashMap<Number160, Boolean>());
                 responsibilityMapRev.put(peerId, contentIDs);
         }
         contentIDs.add(locationKey);
@@ -304,7 +308,7 @@ public class RocksDHT implements Storage{
             removeRevResponsibility(peerId, locationKey);
         }
     }
-    
+
     private void removeRevResponsibility(Number160 peerId, Number160 locationKey) {
         Set<Number160> contentIDs = responsibilityMapRev.get(peerId);
         if (contentIDs != null) {
